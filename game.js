@@ -17,6 +17,67 @@
     right: { dx: 1, dy: 0 },
   };
 
+  // ---------- Sound (synthesized, no audio files needed) ----------
+
+  const AudioCtor = window.AudioContext || window.webkitAudioContext;
+  const audioCtx = AudioCtor ? new AudioCtor() : null;
+  let muted = false;
+
+  function unlockAudio() {
+    if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+  }
+
+  function beep({ freq = 440, sweep = null, duration = 0.15, type = 'square', volume = 0.15, delay = 0 }) {
+    if (!audioCtx || muted) return;
+    const t0 = audioCtx.currentTime + delay;
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, t0);
+    if (sweep) osc.frequency.exponentialRampToValueAtTime(sweep, t0 + duration);
+    gain.gain.setValueAtTime(volume, t0);
+    gain.gain.exponentialRampToValueAtTime(0.001, t0 + duration);
+    osc.connect(gain).connect(audioCtx.destination);
+    osc.start(t0);
+    osc.stop(t0 + duration + 0.02);
+  }
+
+  function noiseBurst({ duration = 0.3, volume = 0.25, delay = 0 } = {}) {
+    if (!audioCtx || muted) return;
+    const t0 = audioCtx.currentTime + delay;
+    const size = Math.max(1, Math.floor(audioCtx.sampleRate * duration));
+    const buffer = audioCtx.createBuffer(1, size, audioCtx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < size; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / size);
+    const noise = audioCtx.createBufferSource();
+    noise.buffer = buffer;
+    const filter = audioCtx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.value = 1100;
+    const gain = audioCtx.createGain();
+    gain.gain.setValueAtTime(volume, t0);
+    gain.gain.exponentialRampToValueAtTime(0.001, t0 + duration);
+    noise.connect(filter).connect(gain).connect(audioCtx.destination);
+    noise.start(t0);
+    noise.stop(t0 + duration + 0.02);
+  }
+
+  const sfx = {
+    place: () => beep({ freq: 220, sweep: 440, duration: 0.08, type: 'square', volume: 0.12 }),
+    explosion: () => noiseBurst({ duration: 0.35, volume: 0.3 }),
+    hit: () => beep({ freq: 180, sweep: 60, duration: 0.12, type: 'square', volume: 0.1 }),
+    powerup: () => {
+      [523.25, 659.25, 783.99].forEach((f, i) => beep({ freq: f, duration: 0.09, type: 'square', volume: 0.14, delay: i * 0.08 }));
+    },
+    death: () => beep({ freq: 300, sweep: 70, duration: 0.5, type: 'sawtooth', volume: 0.18 }),
+    win: () => {
+      [523.25, 659.25, 783.99, 1046.5].forEach((f, i) => beep({ freq: f, duration: 0.16, type: 'square', volume: 0.16, delay: i * 0.12 }));
+    },
+    gameover: () => {
+      [392, 349.23, 293.66, 196].forEach((f, i) => beep({ freq: f, duration: 0.22, type: 'triangle', volume: 0.16, delay: i * 0.15 }));
+    },
+  };
+
   const hudLevel = document.getElementById('hud-level');
   const hudLives = document.getElementById('hud-lives');
   const hudScore = document.getElementById('hud-score');
@@ -146,36 +207,46 @@
     return grid[r][c];
   }
 
-  function isSolidForWalk(c, r, ignoreBombAt) {
-    const t = tileAt(c, r);
-    if (t === WALL || t === BLOCK) return true;
-    const hasBomb = bombs.some(b => b.col === c && b.row === r && !(ignoreBombAt && ignoreBombAt.col === c && ignoreBombAt.row === r));
-    return hasBomb;
-  }
+  const HITBOX_MARGIN = 6;
 
-  function rectOverlap(ax, ay, aw, ah, bx, by, bw, bh) {
-    return ax < bx + bw && ax + aw > bx && ay < by + ah && ay + ah > by;
+  // Tiles the entity's hitbox currently overlaps (it can straddle up to 4
+  // tiles mid-move). Bombs under any of these stay walkable until the
+  // hitbox has fully left them, otherwise a bomb the player is still
+  // standing on can suddenly re-solidify mid-step and trap them.
+  function overlappingTiles(x, y) {
+    const pts = [
+      [x + HITBOX_MARGIN, y + HITBOX_MARGIN],
+      [x + TILE - HITBOX_MARGIN, y + HITBOX_MARGIN],
+      [x + HITBOX_MARGIN, y + TILE - HITBOX_MARGIN],
+      [x + TILE - HITBOX_MARGIN, y + TILE - HITBOX_MARGIN],
+    ];
+    const seen = new Set();
+    const tiles = [];
+    for (const [px, py] of pts) {
+      const c = Math.floor(px / TILE);
+      const r = Math.floor(py / TILE);
+      const k = c + ',' + r;
+      if (!seen.has(k)) { seen.add(k); tiles.push([c, r]); }
+    }
+    return tiles;
   }
 
   function canMoveTo(entity, nx, ny, isPlayer) {
-    const margin = 6;
-    const size = TILE - margin * 2;
     const corners = [
-      [nx + margin, ny + margin],
-      [nx + TILE - margin, ny + margin],
-      [nx + margin, ny + TILE - margin],
-      [nx + TILE - margin, ny + TILE - margin],
+      [nx + HITBOX_MARGIN, ny + HITBOX_MARGIN],
+      [nx + TILE - HITBOX_MARGIN, ny + HITBOX_MARGIN],
+      [nx + HITBOX_MARGIN, ny + TILE - HITBOX_MARGIN],
+      [nx + TILE - HITBOX_MARGIN, ny + TILE - HITBOX_MARGIN],
     ];
+    const ignoreTiles = isPlayer ? overlappingTiles(entity.x, entity.y) : null;
     for (const [px, py] of corners) {
       const c = Math.floor(px / TILE);
       const r = Math.floor(py / TILE);
-      if (isSolidForWalk(c, r, isPlayer ? { col: entity.col, row: entity.row } : null)) {
-        if (isPlayer && bombs.some(b => b.col === c && b.row === r)) {
-          const stillOnBombTile = entity.col === c && entity.row === r;
-          if (!stillOnBombTile) return false;
-        } else {
-          return false;
-        }
+      const t = tileAt(c, r);
+      if (t === WALL || t === BLOCK) return false;
+      if (bombs.some(b => b.col === c && b.row === r)) {
+        const ignored = ignoreTiles && ignoreTiles.some(([ic, ir]) => ic === c && ir === r);
+        if (!ignored) return false;
       }
     }
     return true;
@@ -225,6 +296,7 @@
     if (type === 'power') player.power = Math.min(player.power + 1, 8);
     if (type === 'speed') player.speed = Math.min(player.speed + 25, 260);
     updateHud();
+    sfx.powerup();
   }
 
   function placeBomb() {
@@ -235,6 +307,7 @@
     if (bombs.filter(b => b.owner === 'player').length >= player.maxBombs) return;
     bombs.push({ col: c, row: r, timer: 2000, power: player.power, owner: 'player' });
     player.punch = 220;
+    sfx.place();
   }
 
   function explodeBomb(bomb) {
@@ -266,6 +339,7 @@
     for (const [c, r] of cells) {
       explosions.push({ col: c, row: r, timer: 450 });
     }
+    sfx.explosion();
   }
 
   function updateBombs(dt) {
@@ -294,6 +368,7 @@
       if (explosions.some(e => e.col === ec && e.row === er)) {
         en.alive = false;
         score += 200;
+        sfx.hit();
       }
     }
   }
@@ -302,9 +377,11 @@
     player.alive = false;
     lives -= 1;
     updateHud();
+    sfx.death();
     setTimeout(() => {
       if (lives <= 0) {
         gameState = 'gameover';
+        sfx.gameover();
         showOverlay('💀 เกมจบแล้ว', `น้องนักมวยหมดแรงแล้ว! คะแนนสุดท้าย: ${score}`, 'เล่นใหม่', () => {
           level = 1; score = 0; lives = 3;
           startLevel();
@@ -327,6 +404,7 @@
     gameState = 'win';
     score += 500;
     updateHud();
+    sfx.win();
     showOverlay('🏆 ผ่านด่าน!', `เก่งมาก! ไปด่านต่อไปกันเลย`, 'ด่านถัดไป', () => {
       level += 1;
       startLevel();
@@ -378,7 +456,7 @@
   function drawFloor() {
     for (let r = 0; r < ROWS; r++) {
       for (let c = 0; c < COLS; c++) {
-        const shade = (r + c) % 2 === 0 ? '#2a1f3d' : '#241a35';
+        const shade = (r + c) % 2 === 0 ? '#4cd164' : '#3fb854';
         ctx.fillStyle = shade;
         ctx.fillRect(c * TILE, r * TILE, TILE, TILE);
       }
@@ -391,27 +469,27 @@
         const t = grid[r][c];
         const x = c * TILE, y = r * TILE;
         if (t === WALL) {
-          ctx.fillStyle = '#3d3550';
+          ctx.fillStyle = '#c7ccd6';
           ctx.fillRect(x, y, TILE, TILE);
-          ctx.strokeStyle = '#544a6b';
+          ctx.strokeStyle = '#8b909c';
           ctx.lineWidth = 2;
           ctx.strokeRect(x + 2, y + 2, TILE - 4, TILE - 4);
-          ctx.fillStyle = '#4a4160';
+          ctx.fillStyle = '#e8ecf2';
           ctx.fillRect(x + 4, y + 4, TILE - 8, (TILE - 8) / 2 - 2);
         } else if (t === BLOCK) {
           if (doorPos && c === doorPos[0] && r === doorPos[1] && doorRevealed) {
             drawDoor(x, y);
             continue;
           }
-          ctx.fillStyle = '#b06a3a';
+          ctx.fillStyle = '#c97a34';
           ctx.fillRect(x, y, TILE, TILE);
-          ctx.strokeStyle = '#7a4423';
+          ctx.strokeStyle = '#7a4a1e';
           ctx.lineWidth = 2;
           ctx.strokeRect(x + 2, y + 2, TILE - 4, TILE - 4);
           ctx.beginPath();
           ctx.moveTo(x + 6, y + 6); ctx.lineTo(x + TILE - 6, y + TILE - 6);
           ctx.moveTo(x + TILE - 6, y + 6); ctx.lineTo(x + 6, y + TILE - 6);
-          ctx.strokeStyle = 'rgba(122,68,35,0.6)';
+          ctx.strokeStyle = 'rgba(122,74,30,0.6)';
           ctx.stroke();
         } else {
           if (doorPos && c === doorPos[0] && r === doorPos[1] && doorRevealed) {
@@ -423,12 +501,12 @@
   }
 
   function drawDoor(x, y) {
-    ctx.fillStyle = doorOpen ? '#3dffb0' : '#5a4a76';
+    ctx.fillStyle = doorOpen ? '#ffd23d' : '#2b3a67';
     ctx.fillRect(x + 6, y + 4, TILE - 12, TILE - 8);
-    ctx.fillStyle = doorOpen ? '#0f4433' : '#241a35';
+    ctx.fillStyle = doorOpen ? '#7a5a00' : '#141f42';
     ctx.fillRect(x + 10, y + 10, TILE - 20, TILE - 14);
     if (doorOpen) {
-      ctx.fillStyle = '#eaffef';
+      ctx.fillStyle = '#fff6d9';
       ctx.font = '18px sans-serif';
       ctx.textAlign = 'center';
       ctx.fillText('★', x + TILE / 2, y + TILE / 2 + 6);
@@ -474,10 +552,10 @@
       ctx.scale(pulse, pulse);
       ctx.fillStyle = '#1a1a1a';
       ctx.beginPath(); ctx.arc(0, 0, 14, 0, Math.PI * 2); ctx.fill();
-      ctx.strokeStyle = '#ffdca8';
+      ctx.strokeStyle = '#ffd23d';
       ctx.lineWidth = 2;
       ctx.beginPath(); ctx.moveTo(6, -12); ctx.quadraticCurveTo(14, -20, 10, -26); ctx.stroke();
-      ctx.fillStyle = '#ff8a3d';
+      ctx.fillStyle = '#ff5d3d';
       ctx.beginPath(); ctx.arc(10, -26, 3, 0, Math.PI * 2); ctx.fill();
       ctx.restore();
     }
@@ -487,10 +565,12 @@
     for (const e of explosions) {
       const x = e.col * TILE, y = e.row * TILE;
       const alpha = Math.max(e.timer / 450, 0);
-      ctx.fillStyle = `rgba(255, 138, 61, ${0.55 * alpha + 0.2})`;
+      ctx.fillStyle = `rgba(230, 57, 70, ${0.55 * alpha + 0.2})`;
       ctx.fillRect(x + 3, y + 3, TILE - 6, TILE - 6);
-      ctx.fillStyle = `rgba(255, 220, 168, ${0.6 * alpha})`;
+      ctx.fillStyle = `rgba(255, 210, 61, ${0.65 * alpha})`;
       ctx.fillRect(x + 10, y + 10, TILE - 20, TILE - 20);
+      ctx.fillStyle = `rgba(255, 250, 230, ${0.7 * alpha})`;
+      ctx.fillRect(x + 16, y + 16, TILE - 32, TILE - 32);
     }
   }
 
@@ -652,6 +732,7 @@
   };
 
   window.addEventListener('keydown', (e) => {
+    unlockAudio();
     if (keyMap[e.key]) { keys[keyMap[e.key]] = true; e.preventDefault(); }
     if (e.key === ' ') { placeBomb(); e.preventDefault(); }
     if (e.key === 'p' || e.key === 'P') togglePause();
@@ -687,9 +768,17 @@
   }
 
   btnStart.addEventListener('click', () => {
+    unlockAudio();
     overlay.hidden = true;
     level = 1; score = 0; lives = 3;
     startLevel();
+  });
+
+  const btnMute = document.getElementById('btn-mute');
+  btnMute.addEventListener('click', () => {
+    unlockAudio();
+    muted = !muted;
+    btnMute.textContent = muted ? '🔇' : '🔊';
   });
 
   // ---------- Main loop ----------
