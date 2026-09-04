@@ -1,0 +1,166 @@
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: #1b1024;
+  color: #f4ecff;
+  font-family: 'Trebuchet MS', 'Segoe UI', sans-serif;
+  display: flex;
+  justify-content: center;
+  min-height: 100vh;
+}
+
+#game-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 12px;
+  width: 100%;
+  max-width: 640px;
+}
+
+#hud {
+  width: 100%;
+  max-width: 600px;
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 6px;
+  background: #2c1a3d;
+  border: 3px solid #ff8a3d;
+  border-radius: 10px;
+  padding: 8px 12px;
+  margin-bottom: 10px;
+  font-weight: bold;
+}
+
+.hud-group {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 56px;
+}
+
+.hud-label {
+  font-size: 10px;
+  letter-spacing: 1px;
+  color: #ffb17a;
+}
+
+#hud-lives {
+  color: #ff5d73;
+  font-size: 16px;
+}
+
+#canvas-holder {
+  position: relative;
+  width: 100%;
+  max-width: 600px;
+}
+
+canvas#game {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 600 / 520;
+  display: block;
+  background: #0f0a17;
+  border: 4px solid #ff8a3d;
+  border-radius: 8px;
+  image-rendering: pixelated;
+}
+
+.overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(10, 5, 20, 0.82);
+  border-radius: 8px;
+}
+
+.overlay[hidden] { display: none; }
+
+.panel {
+  text-align: center;
+  padding: 24px 20px;
+  max-width: 380px;
+}
+
+.panel h1 {
+  margin: 0 0 8px;
+  font-size: 28px;
+}
+
+.panel p {
+  margin: 6px 0;
+  line-height: 1.4;
+}
+
+.panel .hint {
+  font-size: 13px;
+  color: #c7b8e0;
+}
+
+.panel button, #overlay button {
+  margin-top: 14px;
+  padding: 10px 28px;
+  font-size: 16px;
+  font-weight: bold;
+  border: none;
+  border-radius: 8px;
+  background: #ff8a3d;
+  color: #2c1a3d;
+  cursor: pointer;
+}
+
+.panel button:active {
+  transform: scale(0.97);
+}
+
+#touch-controls {
+  display: none;
+  width: 100%;
+  max-width: 600px;
+  margin-top: 14px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.dpad {
+  position: relative;
+  width: 150px;
+  height: 150px;
+}
+
+.dbtn {
+  position: absolute;
+  width: 50px;
+  height: 50px;
+  font-size: 18px;
+  background: #3d2452;
+  color: #f4ecff;
+  border: 2px solid #ff8a3d;
+  border-radius: 8px;
+}
+
+.dbtn.up { top: 0; left: 50px; }
+.dbtn.left { top: 50px; left: 0; }
+.dbtn.right { top: 50px; left: 100px; }
+.dbtn.down { top: 100px; left: 50px; }
+
+.bombbtn {
+  width: 84px;
+  height: 84px;
+  border-radius: 50%;
+  font-size: 30px;
+  background: #ff5d73;
+  border: 3px solid #ffdca8;
+}
+
+@media (pointer: coarse) {
+  #touch-controls {
+    display: flex;
+  }
+}

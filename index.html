@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no">
+<title>Boxer Bomber</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="game-wrap">
+    <div id="hud">
+      <div class="hud-group">
+        <span class="hud-label">LEVEL</span>
+        <span id="hud-level">1</span>
+      </div>
+      <div class="hud-group">
+        <span class="hud-label">LIVES</span>
+        <span id="hud-lives">❤❤❤</span>
+      </div>
+      <div class="hud-group">
+        <span class="hud-label">SCORE</span>
+        <span id="hud-score">0</span>
+      </div>
+      <div class="hud-group">
+        <span class="hud-label">BOMBS</span>
+        <span id="hud-bombs">1</span>
+      </div>
+      <div class="hud-group">
+        <span class="hud-label">POWER</span>
+        <span id="hud-power">1</span>
+      </div>
+    </div>
+
+    <div id="canvas-holder">
+      <canvas id="game" width="600" height="520"></canvas>
+
+      <div id="overlay" class="overlay">
+        <div class="panel">
+          <h1>🥊 Boxer Bomber</h1>
+          <p>เกมส์แนว Bomberman นำแสดงโดย "น้องนักมวย"</p>
+          <p class="hint">ลูกศร/WASD เดิน • Space วางระเบิด • P หยุดชั่วคราว</p>
+          <button id="btn-start">เริ่มเกม</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="touch-controls">
+      <div class="dpad">
+        <button id="t-up" class="dbtn up">▲</button>
+        <button id="t-left" class="dbtn left">◀</button>
+        <button id="t-right" class="dbtn right">▶</button>
+        <button id="t-down" class="dbtn down">▼</button>
+      </div>
+      <button id="t-bomb" class="bombbtn">💣</button>
+    </div>
+  </div>
+
+  <script src="game.js"></script>
+</body>
+</html>
